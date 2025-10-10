@@ -11,8 +11,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi import Query, Path
 from typing import Optional
 
-from models.person import PersonCreate, PersonRead, PersonUpdate
-from models.address import AddressCreate, AddressRead, AddressUpdate
+from models.user import UserCreate, UserRead, UserUpdate
+from models.matcha_session import MatchaSessionCreate, MatchaSessionRead, MatchaSessionUpdate
 from models.health import Health
 
 port = int(os.environ.get("FASTAPIPORT", 8000))
@@ -20,17 +20,17 @@ port = int(os.environ.get("FASTAPIPORT", 8000))
 # -----------------------------------------------------------------------------
 # Fake in-memory "databases"
 # -----------------------------------------------------------------------------
-persons: Dict[UUID, PersonRead] = {}
-addresses: Dict[UUID, AddressRead] = {}
+users: Dict[UUID, UserRead] = {}
+matcha_sessions: Dict[UUID, MatchaSessionRead] = {}
 
 app = FastAPI(
-    title="Person/Address API",
-    description="Demo FastAPI app using Pydantic v2 models for Person and Address",
+    title="Matcha Drinking Tracker API",
+    description="User service for tracking matcha drinking sessions and user profiles",
     version="0.1.0",
 )
 
 # -----------------------------------------------------------------------------
-# Address endpoints
+# Health endpoints
 # -----------------------------------------------------------------------------
 
 def make_health(echo: Optional[str], path_echo: Optional[str]=None) -> Health:
@@ -55,116 +55,142 @@ def get_health_with_path(
 ):
     return make_health(echo=echo, path_echo=path_echo)
 
-@app.post("/addresses", response_model=AddressRead, status_code=201)
-def create_address(address: AddressCreate):
-    if address.id in addresses:
-        raise HTTPException(status_code=400, detail="Address with this ID already exists")
-    addresses[address.id] = AddressRead(**address.model_dump())
-    return addresses[address.id]
+# -----------------------------------------------------------------------------
+# Matcha Session endpoints
+# -----------------------------------------------------------------------------
 
-@app.get("/addresses", response_model=List[AddressRead])
-def list_addresses(
-    street: Optional[str] = Query(None, description="Filter by street"),
-    city: Optional[str] = Query(None, description="Filter by city"),
-    state: Optional[str] = Query(None, description="Filter by state/region"),
-    postal_code: Optional[str] = Query(None, description="Filter by postal code"),
-    country: Optional[str] = Query(None, description="Filter by country"),
+@app.post("/matcha-sessions", response_model=MatchaSessionRead, status_code=201)
+def create_matcha_session(session: MatchaSessionCreate):
+    if session.id in matcha_sessions:
+        raise HTTPException(status_code=400, detail="Matcha session with this ID already exists")
+    matcha_sessions[session.id] = MatchaSessionRead(**session.model_dump())
+    return matcha_sessions[session.id]
+
+@app.get("/matcha-sessions", response_model=List[MatchaSessionRead])
+def list_matcha_sessions(
+    session_date: Optional[str] = Query(None, description="Filter by session date (YYYY-MM-DD)"),
+    location: Optional[str] = Query(None, description="Filter by location"),
+    matcha_type: Optional[str] = Query(None, description="Filter by matcha type"),
+    brand: Optional[str] = Query(None, description="Filter by brand"),
+    min_rating: Optional[float] = Query(None, description="Filter by minimum rating (0.0-5.0)"),
+    max_rating: Optional[float] = Query(None, description="Filter by maximum rating (0.0-5.0)"),
 ):
-    results = list(addresses.values())
+    results = list(matcha_sessions.values())
 
-    if street is not None:
-        results = [a for a in results if a.street == street]
-    if city is not None:
-        results = [a for a in results if a.city == city]
-    if state is not None:
-        results = [a for a in results if a.state == state]
-    if postal_code is not None:
-        results = [a for a in results if a.postal_code == postal_code]
-    if country is not None:
-        results = [a for a in results if a.country == country]
+    if session_date is not None:
+        results = [s for s in results if str(s.session_date) == session_date]
+    if location is not None:
+        results = [s for s in results if s.location == location]
+    if matcha_type is not None:
+        results = [s for s in results if s.matcha_type == matcha_type]
+    if brand is not None:
+        results = [s for s in results if s.brand == brand]
+    if min_rating is not None:
+        results = [s for s in results if s.rating is not None and s.rating >= min_rating]
+    if max_rating is not None:
+        results = [s for s in results if s.rating is not None and s.rating <= max_rating]
 
     return results
 
-@app.get("/addresses/{address_id}", response_model=AddressRead)
-def get_address(address_id: UUID):
-    if address_id not in addresses:
-        raise HTTPException(status_code=404, detail="Address not found")
-    return addresses[address_id]
+@app.get("/matcha-sessions/{session_id}", response_model=MatchaSessionRead)
+def get_matcha_session(session_id: UUID):
+    if session_id not in matcha_sessions:
+        raise HTTPException(status_code=404, detail="Matcha session not found")
+    return matcha_sessions[session_id]
 
-@app.patch("/addresses/{address_id}", response_model=AddressRead)
-def update_address(address_id: UUID, update: AddressUpdate):
-    if address_id not in addresses:
-        raise HTTPException(status_code=404, detail="Address not found")
-    stored = addresses[address_id].model_dump()
+@app.put("/matcha-sessions/{session_id}", response_model=MatchaSessionRead)
+def update_matcha_session(session_id: UUID, update: MatchaSessionUpdate):
+    if session_id not in matcha_sessions:
+        raise HTTPException(status_code=404, detail="Matcha session not found")
+    stored = matcha_sessions[session_id].model_dump()
     stored.update(update.model_dump(exclude_unset=True))
-    addresses[address_id] = AddressRead(**stored)
-    return addresses[address_id]
+    matcha_sessions[session_id] = MatchaSessionRead(**stored)
+    return matcha_sessions[session_id]
+
+@app.delete("/matcha-sessions/{session_id}", status_code=204)
+def delete_matcha_session(session_id: UUID):
+    if session_id not in matcha_sessions:
+        raise HTTPException(status_code=404, detail="Matcha session not found")
+    del matcha_sessions[session_id]
+    return None
 
 # -----------------------------------------------------------------------------
-# Person endpoints
+# User endpoints
 # -----------------------------------------------------------------------------
-@app.post("/persons", response_model=PersonRead, status_code=201)
-def create_person(person: PersonCreate):
-    # Each person gets its own UUID; stored as PersonRead
-    person_read = PersonRead(**person.model_dump())
-    persons[person_read.id] = person_read
-    return person_read
 
-@app.get("/persons", response_model=List[PersonRead])
-def list_persons(
-    uni: Optional[str] = Query(None, description="Filter by Columbia UNI"),
+@app.post("/users", response_model=UserRead, status_code=201)
+def create_user(user: UserCreate):
+    # Each user gets its own UUID; stored as UserRead
+    user_read = UserRead(**user.model_dump())
+    users[user_read.id] = user_read
+    return user_read
+
+@app.get("/users", response_model=List[UserRead])
+def list_users(
+    username: Optional[str] = Query(None, description="Filter by username"),
     first_name: Optional[str] = Query(None, description="Filter by first name"),
     last_name: Optional[str] = Query(None, description="Filter by last name"),
     email: Optional[str] = Query(None, description="Filter by email"),
     phone: Optional[str] = Query(None, description="Filter by phone number"),
-    birth_date: Optional[str] = Query(None, description="Filter by date of birth (YYYY-MM-DD)"),
-    city: Optional[str] = Query(None, description="Filter by city of at least one address"),
-    country: Optional[str] = Query(None, description="Filter by country of at least one address"),
+    favorite_matcha_powder: Optional[str] = Query(None, description="Filter by favorite matcha powder"),
+    favorite_matcha_place: Optional[str] = Query(None, description="Filter by favorite matcha place"),
+    min_budget: Optional[float] = Query(None, description="Filter by minimum matcha budget"),
+    max_budget: Optional[float] = Query(None, description="Filter by maximum matcha budget"),
+    join_date: Optional[str] = Query(None, description="Filter by join date (YYYY-MM-DD)"),
 ):
-    results = list(persons.values())
+    results = list(users.values())
 
-    if uni is not None:
-        results = [p for p in results if p.uni == uni]
+    if username is not None:
+        results = [u for u in results if u.username == username]
     if first_name is not None:
-        results = [p for p in results if p.first_name == first_name]
+        results = [u for u in results if u.first_name == first_name]
     if last_name is not None:
-        results = [p for p in results if p.last_name == last_name]
+        results = [u for u in results if u.last_name == last_name]
     if email is not None:
-        results = [p for p in results if p.email == email]
+        results = [u for u in results if u.email == email]
     if phone is not None:
-        results = [p for p in results if p.phone == phone]
-    if birth_date is not None:
-        results = [p for p in results if str(p.birth_date) == birth_date]
-
-    # nested address filtering
-    if city is not None:
-        results = [p for p in results if any(addr.city == city for addr in p.addresses)]
-    if country is not None:
-        results = [p for p in results if any(addr.country == country for addr in p.addresses)]
+        results = [u for u in results if u.phone == phone]
+    if favorite_matcha_powder is not None:
+        results = [u for u in results if u.favorite_matcha_powder == favorite_matcha_powder]
+    if favorite_matcha_place is not None:
+        results = [u for u in results if u.favorite_matcha_place == favorite_matcha_place]
+    if min_budget is not None:
+        results = [u for u in results if u.matcha_budget is not None and u.matcha_budget >= min_budget]
+    if max_budget is not None:
+        results = [u for u in results if u.matcha_budget is not None and u.matcha_budget <= max_budget]
+    if join_date is not None:
+        results = [u for u in results if str(u.join_date) == join_date]
 
     return results
 
-@app.get("/persons/{person_id}", response_model=PersonRead)
-def get_person(person_id: UUID):
-    if person_id not in persons:
-        raise HTTPException(status_code=404, detail="Person not found")
-    return persons[person_id]
+@app.get("/users/{user_id}", response_model=UserRead)
+def get_user(user_id: UUID):
+    if user_id not in users:
+        raise HTTPException(status_code=404, detail="User not found")
+    return users[user_id]
 
-@app.patch("/persons/{person_id}", response_model=PersonRead)
-def update_person(person_id: UUID, update: PersonUpdate):
-    if person_id not in persons:
-        raise HTTPException(status_code=404, detail="Person not found")
-    stored = persons[person_id].model_dump()
+@app.put("/users/{user_id}", response_model=UserRead)
+def update_user(user_id: UUID, update: UserUpdate):
+    if user_id not in users:
+        raise HTTPException(status_code=404, detail="User not found")
+    stored = users[user_id].model_dump()
     stored.update(update.model_dump(exclude_unset=True))
-    persons[person_id] = PersonRead(**stored)
-    return persons[person_id]
+    users[user_id] = UserRead(**stored)
+    return users[user_id]
+
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: UUID):
+    if user_id not in users:
+        raise HTTPException(status_code=404, detail="User not found")
+    del users[user_id]
+    return None
 
 # -----------------------------------------------------------------------------
 # Root
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "Welcome to the Person/Address API. See /docs for OpenAPI UI."}
+    return {"message": "Welcome to the Matcha Drinking Tracker API. See /docs for OpenAPI UI."}
 
 # -----------------------------------------------------------------------------
 # Entrypoint for `python main.py`
