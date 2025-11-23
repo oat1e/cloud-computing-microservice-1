@@ -1,0 +1,44 @@
+# Cloud Build configuration for deploying to Cloud Run
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/matcha-api:$SHORT_SHA', '.']
+  
+  # Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/matcha-api:$SHORT_SHA']
+  
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'matcha-api'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/matcha-api:$SHORT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'DB_NAME=matcha_db,DB_USER=root'
+      - '--add-cloudsql-instances'
+      - '${_CLOUD_SQL_INSTANCE}'
+      - '--set-secrets'
+      - 'DB_PASSWORD=db-password:latest'
+      - '--set-env-vars'
+      - 'CLOUD_SQL_CONNECTION_NAME=${_CLOUD_SQL_INSTANCE}'
+
+# Substitution variables (set these in Cloud Build triggers or via gcloud)
+substitutions:
+  _CLOUD_SQL_INSTANCE: 'PROJECT_ID:REGION:INSTANCE_NAME'  # Replace with your CloudSQL instance
+
+images:
+  - 'gcr.io/$PROJECT_ID/matcha-api:$SHORT_SHA'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
