@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi import Query, Path
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,14 @@ app = FastAPI(
     title="Matcha Drinking Tracker API",
     description="User service for tracking matcha drinking sessions and user profiles",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # You can replace "*" with specific origins if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
